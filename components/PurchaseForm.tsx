@@ -79,7 +79,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, isDuplicate = fal
     defaultValues: {
       purchase_date: new Date().toISOString().split('T')[0],
       reference_invoice: '',
-      quantity: 1,
+      quantity: 0,
       product_name: '',
       new_product_name: '',
       new_product_hsn_code: '',
@@ -112,7 +112,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, isDuplicate = fal
       reset({
         purchase_date: new Date().toISOString().split('T')[0],
         reference_invoice: '',
-        quantity: 1,
+        quantity: 0,
         product_name: '',
       });
     }
@@ -372,7 +372,17 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, isDuplicate = fal
        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Quantity</label>
-          <Input id="quantity" type="number" {...register('quantity', { required: 'Quantity is required', valueAsNumber: true, min: { value: 1, message: 'Quantity must be positive' } })} />
+          <Input 
+            id="quantity" 
+            type="number" 
+            min="0"
+            onFocus={(e) => e.target.select()}
+            {...register('quantity', { 
+              required: 'Quantity is required', 
+              valueAsNumber: true, 
+              validate: (value) => Number(value) > 0 || 'Quantity must be positive' 
+            })} 
+          />
           {errors.quantity && <p className="mt-1 text-sm text-red-500">{errors.quantity.message}</p>}
         </div>
       </div>
