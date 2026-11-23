@@ -29,7 +29,7 @@ const fetchInvoiceWithItems = async (invoiceId: string): Promise<FullInvoice> =>
   if (error) {
     throw new Error(`Could not fetch invoice details: ${error.message}`);
   }
-  return data as FullInvoice;
+  return data as unknown as FullInvoice;
 };
 
 const CreateInvoicePage: React.FC = () => {

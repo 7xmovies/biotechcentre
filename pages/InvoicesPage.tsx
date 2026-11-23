@@ -6,7 +6,7 @@ import { InvoiceWithDetails, InvoiceItem, Invoice, Customer, Unit, CompanyDetail
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { PlusCircle, Pencil, Trash2, Download, Search, Eye } from 'lucide-react';
+import { PlusCircle, Pencil, Trash2, Download, Search, Eye, Archive, X } from 'lucide-react';
 import { formatDate, formatCurrency, formatNumber } from '../hooks/lib/utils';
 import Pagination from '../components/ui/Pagination';
 import Dialog from '../components/ui/Dialog';
@@ -18,6 +18,7 @@ import Skeleton from '../components/ui/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import JSZip from 'jszip';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -62,7 +63,7 @@ const fetchInvoiceWithItems = async (invoiceId: string): Promise<FullInvoice> =>
     console.error('Error fetching single invoice:', error);
     throw new Error(`Could not fetch invoice details: ${error.message}`);
   }
-  return data as FullInvoice;
+  return data as unknown as FullInvoice;
 };
 
 const fetchCompanyDetails = async (): Promise<CompanyDetails | null> => {
@@ -99,6 +100,9 @@ const InvoicesPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [canShare, setCanShare] = useState(false);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [zipProgress, setZipProgress] = useState<{ done: number; total: number } | null>(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const { data: invoicesData, isLoading, error } = useQuery({
@@ -128,7 +132,13 @@ const InvoicesPage: React.FC = () => {
 
   const deleteMutation = useMutation({
     mutationFn: deleteInvoice,
-    onSuccess: () => {
+    onSuccess: (_data, deletedId) => {
+      setSelectedInvoiceIds((prev) => {
+        if (!prev.has(deletedId)) return prev;
+        const next = new Set(prev);
+        next.delete(deletedId);
+        return next;
+      });
       toast('Invoice deleted and stock adjusted successfully!');
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });
@@ -166,7 +176,7 @@ const InvoicesPage: React.FC = () => {
     doc.setFont("helvetica");
     const grayColor = "#6b7280";
     const blackColor = "#111827";
-    const borderColor = [200, 200, 200]; // Darker gray for visible boxing
+    const borderColor: [number, number, number] = [200, 200, 200]; // Darker gray for visible boxing
 
     // --- Header ---
     doc.setTextColor(blackColor);
@@ -454,11 +464,111 @@ const InvoicesPage: React.FC = () => {
     }
   };
 
+  const pageInvoiceIds = invoices.map((inv) => inv.id);
+  const allOnPageSelected =
+    pageInvoiceIds.length > 0 && pageInvoiceIds.every((id) => selectedInvoiceIds.has(id));
+  const someOnPageSelected =
+    pageInvoiceIds.some((id) => selectedInvoiceIds.has(id)) && !allOnPageSelected;
+
+  const toggleSelectInvoice = (invoiceId: string) => {
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(invoiceId)) {
+        next.delete(invoiceId);
+      } else {
+        next.add(invoiceId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedInvoiceIds((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        pageInvoiceIds.forEach((id) => next.delete(id));
+      } else {
+        pageInvoiceIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedInvoiceIds(new Set());
+  };
+
+  const handleDownloadZip = async () => {
+    const ids: string[] = Array.from(selectedInvoiceIds);
+    if (ids.length === 0) {
+      toast('Please select at least one invoice to download.');
+      return;
+    }
+
+    setIsDownloadingZip(true);
+    setZipProgress({ done: 0, total: ids.length });
+    toast(`Preparing ${ids.length} invoice PDF${ids.length > 1 ? 's' : ''}...`);
+
+    try {
+      const zip = new JSZip();
+      const usedNames = new Set<string>();
+      let completed = 0;
+
+      // Process in batches of 5 for responsiveness
+      const batchSize = 5;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const fullInvoices = await Promise.all(batch.map((id) => fetchInvoiceWithItems(id)));
+
+        for (const fullInvoice of fullInvoices) {
+          const doc = generateInvoicePDF(fullInvoice, companyDetails || null);
+          const pdfBuffer = doc.output('arraybuffer');
+
+          // Sanitize invoice number so slashes (e.g. BTC-432/26-27) don't create nested zip folders
+          const safeNumber = String(fullInvoice.invoice_number || fullInvoice.id)
+            .replace(/[\\/:*?"<>|]/g, '_')
+            .trim();
+          let fileName = `Invoice-${safeNumber}.pdf`;
+          let suffix = 2;
+          while (usedNames.has(fileName.toLowerCase())) {
+            fileName = `Invoice-${safeNumber}-${suffix}.pdf`;
+            suffix += 1;
+          }
+          usedNames.add(fileName.toLowerCase());
+
+          zip.file(fileName, pdfBuffer);
+          completed += 1;
+          setZipProgress({ done: completed, total: ids.length });
+        }
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const dateTag = new Date().toISOString().split('T')[0];
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Invoices-${dateTag}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast(`Downloaded ${ids.length} invoice${ids.length > 1 ? 's' : ''} as ZIP!`);
+    } catch (err) {
+      console.error('Error generating ZIP:', err);
+      toast(`Failed to generate ZIP: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsDownloadingZip(false);
+      setZipProgress(null);
+    }
+  };
+
   const renderSkeleton = () => (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-10"></TableHead>
             <TableHead>Invoice #</TableHead>
             <TableHead>Customer</TableHead>
             <TableHead>Date</TableHead>
@@ -469,6 +579,7 @@ const InvoicesPage: React.FC = () => {
         <TableBody>
           {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
             <TableRow key={index}>
+              <TableCell><Skeleton className="h-4 w-4 rounded" /></TableCell>
               <TableCell><Skeleton className="h-5 w-3/4" /></TableCell>
               <TableCell><Skeleton className="h-5 w-1/2" /></TableCell>
               <TableCell><Skeleton className="h-5 w-1/3" /></TableCell>
@@ -489,18 +600,53 @@ const InvoicesPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 bg-clip-text text-transparent">Invoices</h1>
-        <Button onClick={() => navigate('/invoices/new')}>
-          <PlusCircle className="w-4 h-4 mr-2" />
-          New Invoice
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleDownloadZip}
+            disabled={selectedInvoiceIds.size === 0 || isDownloadingZip}
+            className={
+              selectedInvoiceIds.size > 0
+                ? 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 dark:border-blue-400 dark:bg-blue-950/70 dark:text-blue-200 dark:hover:bg-blue-900/80 dark:hover:text-white'
+                : undefined
+            }
+          >
+            <Archive className="w-4 h-4 mr-2" />
+            {isDownloadingZip && zipProgress
+              ? `Zipping (${zipProgress.done}/${zipProgress.total})...`
+              : selectedInvoiceIds.size > 0
+                ? `Download ZIP (${selectedInvoiceIds.size})`
+                : 'Download ZIP'}
+          </Button>
+          <Button onClick={() => navigate('/invoices/new')}>
+            <PlusCircle className="w-4 h-4 mr-2" />
+            New Invoice
+          </Button>
+        </div>
       </div>
 
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <CardTitle>Invoice List</CardTitle>
+            <div className="flex items-center gap-3">
+              <CardTitle>Invoice List</CardTitle>
+              {selectedInvoiceIds.size > 0 && (
+                <div className="flex items-center gap-2 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-md px-2.5 py-1">
+                  <span>{selectedInvoiceIds.size} selected</span>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="inline-flex items-center text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-white"
+                    aria-label="Clear selection"
+                    title="Clear selection"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Input
@@ -519,6 +665,19 @@ const InvoicesPage: React.FC = () => {
                 <Table className="responsive-table">
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <input
+                          type="checkbox"
+                          checked={allOnPageSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = someOnPageSelected;
+                          }}
+                          onChange={toggleSelectAllOnPage}
+                          disabled={invoices.length === 0 || isDownloadingZip}
+                          aria-label="Select all invoices on this page"
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </TableHead>
                       <TableHead>Invoice #</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Date</TableHead>
@@ -527,8 +686,23 @@ const InvoicesPage: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoices.length > 0 ? invoices.map((invoice) => (
-                      <TableRow key={invoice.id}>
+                    {invoices.length > 0 ? invoices.map((invoice) => {
+                      const isSelected = selectedInvoiceIds.has(invoice.id);
+                      return (
+                      <TableRow
+                        key={invoice.id}
+                        className={isSelected ? 'bg-blue-50/60 dark:bg-blue-950/20' : undefined}
+                      >
+                        <TableCell data-label="Select">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectInvoice(invoice.id)}
+                            disabled={isDownloadingZip}
+                            aria-label={`Select invoice ${invoice.invoice_number}`}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </TableCell>
                         <TableCell data-label="Invoice #" className="font-medium">{invoice.invoice_number}</TableCell>
                         <TableCell data-label="Customer">{invoice.customers?.name || 'Guest'}</TableCell>
                         <TableCell data-label="Date">{formatDate(invoice.invoice_date)}</TableCell>
@@ -547,7 +721,8 @@ const InvoicesPage: React.FC = () => {
                           </div>
                         </TableCell>
                       </TableRow>
-                    )) : (
+                      );
+                    }) : (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center h-24">No invoices found.</TableCell>
                       </TableRow>

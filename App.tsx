@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from './components/ui/Toaster';
 import DashboardPage from './pages/DashboardPage';
-// Fix: Correct import for InvoicesPage.tsx which is now a module.
 import InvoicesPage from './pages/InvoicesPage';
 import ProductsPage from './pages/ProductsPage';
 import CustomersPage from './pages/CustomersPage';
@@ -19,25 +18,25 @@ import InvoiceSettingsPage from './pages/InvoiceSettingsPage';
 import CreateInvoicePage from './pages/CreateInvoicePage';
 import ImportExportPage from './pages/ImportExportPage';
 import PasswordProtectPage from './pages/PasswordProtectPage';
+import { getAuthToken, onUnauthorized } from './hooks/lib/authToken';
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => Boolean(getAuthToken()));
 
-  // Use an effect to check authentication status once on mount
   useEffect(() => {
-    const isAuthed = sessionStorage.getItem('isAppAuthenticated') === 'true';
-    setIsAuthenticated(isAuthed);
+    return onUnauthorized(() => {
+      setIsAuthenticated(false);
+    });
   }, []);
 
   const handleAuthSuccess = () => {
     setIsAuthenticated(true);
   };
 
-  // If not authenticated, show the password page
   if (!isAuthenticated) {
     return <PasswordProtectPage onSuccess={handleAuthSuccess} />;
   }
-  
+
   return (
     <HashRouter>
       <Routes>

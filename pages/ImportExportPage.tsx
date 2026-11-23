@@ -55,7 +55,8 @@ const ImportExportPage: React.FC = () => {
         setExportingType(type);
         toast(`Preparing ${type} data for export...`);
         try {
-            const { data, error } = await supabase.from(type).select('*').order('name' in (await supabase.from(type).select('*', { head: true })).data?.[0] ? 'name' : 'created_at');
+            const sortCol = type === 'purchases' ? 'purchase_date' : 'name';
+            const { data, error } = await supabase.from(type).select('*').order(sortCol);
             if (error) throw error;
             if (!data || data.length === 0) {
                 toast(`No ${type} to export.`);

@@ -36,7 +36,7 @@ const fetchStock = async (page: number, searchTerm: string): Promise<{ data: Sto
     .range(from, to);
 
   if (error) throw new Error(error.message);
-  return { data: data as StockProduct[], count: count || 0 };
+  return { data: data as unknown as StockProduct[], count: count || 0 };
 };
 
 const StockPage: React.FC = () => {

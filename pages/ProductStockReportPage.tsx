@@ -40,7 +40,7 @@ const fetchProductDetails = async (productId: string): Promise<ProductDetails> =
         .eq('id', productId)
         .single();
     if (error) throw new Error(error.message);
-    return data as ProductDetails;
+    return data as unknown as ProductDetails;
 };
 
 const fetchAllProductPurchases = async (productId: string): Promise<Purchase[]> => {
