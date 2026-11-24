@@ -32,9 +32,9 @@ const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({ invoice, companyDetai
       h1,h2,h3 { margin:0; color: #111; }
       .header { display:flex; justify-content:space-between; align-items:flex-start; border:1px solid #ddd; padding:15px; border-radius:6px; margin-bottom:25px; }
       .company h1 { font-size: 1.8em; }
-      .company p { font-size: 0.9em; color: #777; margin-top: 2px; }
+      .company p { font-size: 1.05em; font-weight: bold; color: #374151; margin-top: 4px; }
       .invoice-meta { text-align:right; }
-      .invoice-meta h2 { margin:0 0 5px 0; font-size: 1.5em; color: #555; }
+      .invoice-meta .invoice-no { font-size: 1.05em; font-weight: bold; color: #111; margin-bottom: 4px; }
       .invoice-meta p { margin: 0; line-height: 1.4; }
       .columns { display:flex; justify-content:space-between; margin-bottom:25px; }
       .panel { width:48%; border:1px solid #ddd; padding:10px; border-radius:6px; font-size: 0.9em; }
@@ -64,10 +64,8 @@ const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({ invoice, companyDetai
                         {companyDetails?.slogan && <p>{companyDetails.slogan}</p>}
                     </div>
                     <div className="invoice-meta">
-                        <h2>Invoice</h2>
-                        <p><strong>No:</strong> {invoice.invoice_number}<br />
-                        <strong>Date:</strong> {formatDate(invoice.invoice_date)}
-                        </p>
+                        <p className="invoice-no">Invoice No :- {invoice.invoice_number}</p>
+                        <p><strong>Date:</strong> {formatDate(invoice.invoice_date)}</p>
                     </div>
                 </div>
 

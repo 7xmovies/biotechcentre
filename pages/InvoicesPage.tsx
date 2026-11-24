@@ -184,28 +184,29 @@ const InvoicesPage: React.FC = () => {
     doc.setFont("helvetica", "bold");
     doc.text(String(companyDetails?.name || "Company Name").toUpperCase(), 14, 20);
     
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(grayColor);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor("#374151");
     if (companyDetails?.slogan) {
-        doc.text(String(companyDetails.slogan), 14, 26);
+        doc.text(String(companyDetails.slogan), 14, 27);
     }
 
-    doc.setTextColor(grayColor);
-    doc.setFontSize(16);
-    doc.text("Invoice", pageWidth - 14, 20, { align: "right" });
-    
-    doc.setFontSize(10);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
     doc.setTextColor(blackColor);
-    doc.text(`No: ${invoice.invoice_number}`, pageWidth - 14, 28, { align: "right" });
+    doc.text(`Invoice No :- ${invoice.invoice_number}`, pageWidth - 14, 20, { align: "right" });
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(blackColor);
     try {
-        doc.text(`Date: ${formatDate(invoice.invoice_date)}`, pageWidth - 14, 33, { align: "right" });
+        doc.text(`Date: ${formatDate(invoice.invoice_date)}`, pageWidth - 14, 27, { align: "right" });
     } catch (e) {
-        doc.text(`Date: ${invoice.invoice_date}`, pageWidth - 14, 33, { align: "right" });
+        doc.text(`Date: ${invoice.invoice_date}`, pageWidth - 14, 27, { align: "right" });
     }
 
     // --- Billing Boxes ---
-    const boxY = 45;
+    const boxY = 39;
     const boxHeight = 45; 
     const boxWidth = (pageWidth - 28 - 10) / 2; 
     const box2X = 14 + boxWidth + 10;
@@ -217,6 +218,7 @@ const InvoicesPage: React.FC = () => {
         doc.roundedRect(x, y, boxWidth, boxHeight, 2, 2, 'S');
         
         // Title
+        doc.setFont("helvetica", "normal");
         doc.setFontSize(10);
         doc.setTextColor(grayColor);
         doc.text(title, x + 4, y + 8);
